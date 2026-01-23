@@ -149,8 +149,8 @@ def main():
     search_crew = SearchCrew()
     
     # Define test query
-    test_query = "What is the meaning of DSPY?"
-    
+    # test_query = "What is the meaning of DSPY?"
+    test_query = "What is the THE DSPY COMPILER. Summarize the stages please?"
     # Kickoff the crew with the query
     result = search_crew.crew().kickoff(inputs={'query': test_query})
     

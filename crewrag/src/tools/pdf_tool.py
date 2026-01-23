@@ -1,6 +1,5 @@
-
 import os
-
+import logging
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue, SearchParams
 from typing import List, Dict, Any, Optional
@@ -9,14 +8,17 @@ from dotenv import load_dotenv
 from crewai.tools import BaseTool
 from langchain_ollama import OllamaEmbeddings
 
-
 # Load environment variables from .env file
 load_dotenv()
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class QdrantSearchTool(BaseTool):
     """Tool for searching documents in Qdrant vector database."""
-    name: str = "Qdrant Search Tool"
+    name: str = "Search PDF Knowledge Base"
     description: str = (
         "Searches the PDF knowledge base using semantic similarity. "
         "Use this tool FIRST for any queries about DSPY, machine learning, "
@@ -42,39 +44,70 @@ class QdrantSearchTool(BaseTool):
         
         # Initialize Ollama embeddings to match ingestion
         ollama_model = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
+        logger.info(f"Initializing QdrantSearchTool with embedding model: {ollama_model}")
         self.embeddings = OllamaEmbeddings(
             base_url=ollama_base_url,
             model=ollama_model
         )
     
-    def _run(self, query_text: str, collection_name: str = "knowledge_base", limit: int = 5) -> str:
+    def _run(self, query_text: str) -> str:
         """
         Execute the search tool.
         
         Args:
             query_text: Query string to search for
-            collection_name: Name of the Qdrant collection
-            limit: Maximum number of results to return
         
         Returns:
             Formatted string with search results
         """
-        query_vector = self.embeddings.embed_query(query_text)
-        results = self.search_documents(
-            collection_name=collection_name,
-            query_vector=query_vector,
-            limit=limit
-        )
-        
-        formatted_results = []
-        for i, result in enumerate(results, 1):
-            formatted_results.append(
-                f"{i}. Score: {result['score']:.4f}\n"
-                f"   Content: {result['payload'].get('text', 'N/A')[:200]}...\n"
-                f"   Source: {result['payload'].get('source', 'N/A')}"
+        try:
+            # Log what we received
+            logger.info(f"QdrantSearchTool received query: '{query_text}'")
+            logger.info(f"Query type: {type(query_text)}")
+            
+            # Clean the query text
+            clean_query = str(query_text).strip()
+            logger.info(f"Cleaned query: '{clean_query}'")
+            
+            # Generate embedding
+            logger.info("Generating query embedding...")
+            query_vector = self.embeddings.embed_query(clean_query)
+            logger.info(f"Embedding generated, vector length: {len(query_vector)}")
+            
+            # Search
+            logger.info("Searching Qdrant...")
+            results = self.search_documents(
+                collection_name="knowledge_base",
+                query_vector=query_vector,
+                limit=5
             )
-        
-        return "\n\n".join(formatted_results) if formatted_results else "No results found."
+            
+            logger.info(f"Found {len(results)} results")
+            
+            if not results:
+                return "No results found in the PDF knowledge base. Try web search."
+            
+            # Format results
+            formatted_results = []
+            for i, result in enumerate(results, 1):
+                score = result['score']
+                content = result['payload'].get('text', 'N/A')[:300]  # Show more content
+                source = result['payload'].get('source', 'N/A')
+                
+                logger.info(f"Result {i}: Score={score:.4f}, Source={source}")
+                
+                formatted_results.append(
+                    f"Result {i} (Relevance: {score:.4f}):\n"
+                    f"Content: {content}...\n"
+                    f"Source: {source}\n"
+                )
+            
+            return "\n".join(formatted_results)
+            
+        except Exception as e:
+            error_msg = f"Error in QdrantSearchTool: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return f"Error searching knowledge base: {str(e)}"
     
     def search_documents(
         self,
@@ -97,39 +130,44 @@ class QdrantSearchTool(BaseTool):
         Returns:
             List of search results with scores and payloads
         """
-        search_params = SearchParams(
-            exact=False,
-            quantization=None
-        ) if score_threshold else None
-        
-        filter_obj = None
-        if filters:
-            conditions = [
-                FieldCondition(
-                    key=key,
-                    match=MatchValue(value=value)
-                )
-                for key, value in filters.items()
+        try:
+            search_params = SearchParams(
+                exact=False,
+                quantization=None
+            ) if score_threshold else None
+            
+            filter_obj = None
+            if filters:
+                conditions = [
+                    FieldCondition(
+                        key=key,
+                        match=MatchValue(value=value)
+                    )
+                    for key, value in filters.items()
+                ]
+                filter_obj = Filter(must=conditions)
+            
+            logger.info(f"Querying collection: {collection_name}")
+            results = self.client.query_points(
+                collection_name=collection_name,
+                query=query_vector,
+                limit=limit,
+                score_threshold=score_threshold,
+                query_filter=filter_obj,
+                search_params=search_params
+            ).points
+            
+            return [
+                {
+                    "id": hit.id,
+                    "score": hit.score,
+                    "payload": hit.payload
+                }
+                for hit in results
             ]
-            filter_obj = Filter(must=conditions)
-        
-        results = self.client.query_points(
-            collection_name=collection_name,
-            query=query_vector,
-            limit=limit,
-            score_threshold=score_threshold,
-            query_filter=filter_obj,
-            search_params=search_params
-        ).points
-        
-        return [
-            {
-                "id": hit.id,
-                "score": hit.score,
-                "payload": hit.payload
-            }
-            for hit in results
-        ]
+        except Exception as e:
+            logger.error(f"Error in search_documents: {e}", exc_info=True)
+            raise
     
     def get_document(self, collection_name: str, document_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -192,5 +230,3 @@ if __name__ == "__main__":
     query = "What is dspy?"  # Replace with your query
     
     tool.test_search(collection_name=collection_name, query_text=query, limit=5)
-    
-    

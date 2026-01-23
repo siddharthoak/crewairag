@@ -18,6 +18,7 @@ langchain-text-splitters="1.1.0"
 pypdf="6.5.0"
 sentence-transformers="5.2.0"
 litellm="1.55.8"  
+streamlit="1.53.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
