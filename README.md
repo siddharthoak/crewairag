@@ -9,7 +9,7 @@ CrewRag integrates multi-agent systems with RAG to enable intelligent informatio
 ## Installation
 
 ```bash
-pip install -r requirements.txt
+poetry install
 ```
 
 ## Usage
@@ -27,7 +27,7 @@ pip install -r requirements.txt
 ## Requirements
 
 - Python 3.8+
-- Dependencies listed in `requirements.txt`
+- Poetry for dependency management
 
 ## License
 
@@ -35,4 +35,5 @@ pip install -r requirements.txt
 
 ## Contributing
 
-Contributions are welcome. Please open an issue or submit a pull request.# crewairag
+Contributions are welcome. Please open an issue or submit a pull request.
+
