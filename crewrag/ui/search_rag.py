@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import sys
 
-# ✅ CRITICAL: Disable CrewAI telemetry BEFORE importing CrewAI
+# CRITICAL: Disable CrewAI telemetry BEFORE importing CrewAI
 os.environ["OTEL_SDK_DISABLED"] = "true"
 
 from crewrag.src.crew.search_crew import SearchCrew
@@ -21,7 +21,7 @@ if "crew" not in st.session_state:
     with st.spinner("Initializing AI crew..."):
         try:
             st.session_state.crew = SearchCrew()
-            st.success("✅ Crew initialized successfully!")
+            st.success("Crew initialized successfully!")
         except Exception as e:
             st.error(f"Failed to initialize crew: {e}")
             st.stop()

@@ -82,11 +82,11 @@ class SearchCrew:
     }
 
     def __init__(self):
-        # ✅ Use Ollama with string-based model specification
+        # Use Ollama with string-based model specification
         llm_model = os.getenv("LLM_MODEL", "llama3.2:1b")
         print(f"Using Ollama model: {llm_model}")
         
-        # ✅ Store model string with ollama/ prefix
+        # Store model string with ollama/ prefix
         self.model_name = f"ollama/{llm_model}"
         
         # Initialize tools
