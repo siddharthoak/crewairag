@@ -21,14 +21,16 @@ class QdrantSearchTool(BaseTool):
     name: str = "Search PDF Knowledge Base"
     description: str = (
         "Searches the PDF knowledge base using semantic similarity. "
-        "Use this tool FIRST for any queries about DSPY, machine learning, "
+        "Use this tool FIRST for queries about DSPY, machine learning, "
         "AI frameworks, or technical documentation. "
-        "Input should be a natural language question or search query. "
-        "Returns the most relevant document excerpts with similarity scores."
+        "Returns 'NOT FOUND' if query is outside knowledge base scope - "
+        "in that case, use web search instead. "
+        "Input should be a natural language question or search query."
     )
     
     client: Any = None
     embeddings: Any = None
+    relevance_threshold: float = 0.4  # Minimum score for relevant results
     
     def __init__(self, host: str = "localhost", port: int = 6333, ollama_base_url: str = "http://localhost:11434"):
         """
@@ -51,50 +53,75 @@ class QdrantSearchTool(BaseTool):
         )
     
     def _run(self, query_text: str) -> str:
-        """
-        Execute the search tool.
-        
-        Args:
-            query_text: Query string to search for
-        
-        Returns:
-            Formatted string with search results
-        """
+        """Execute the search tool."""
         try:
-            # Log what we received
-            logger.info(f"QdrantSearchTool received query: '{query_text}'")
-            logger.info(f"Query type: {type(query_text)}")
+            # Visual separator
+            print("\n" + "="*80)
+            print("🔍 PDF KNOWLEDGE BASE TOOL CALLED")
+            print("="*80)
+            print(f"📥 INPUT: {query_text}")
+            print("="*80 + "\n")
             
             # Clean the query text
             clean_query = str(query_text).strip()
-            logger.info(f"Cleaned query: '{clean_query}'")
             
             # Generate embedding
-            logger.info("Generating query embedding...")
+            print("⚙️  Generating embedding...")
             query_vector = self.embeddings.embed_query(clean_query)
-            logger.info(f"Embedding generated, vector length: {len(query_vector)}")
+            print(f"✅ Embedding generated (dimension: {len(query_vector)})")
             
             # Search
-            logger.info("Searching Qdrant...")
+            print("🔎 Searching Qdrant database...")
             results = self.search_documents(
                 collection_name="knowledge_base",
                 query_vector=query_vector,
                 limit=5
             )
             
-            logger.info(f"Found {len(results)} results")
+            print(f"📊 Found {len(results)} results\n")
             
+            # ✅ Check if no results found
             if not results:
-                return "No results found in the PDF knowledge base. Try web search."
+                output = (
+                    "❌ NOT FOUND - No results in PDF knowledge base.\n"
+                    "This query appears to be outside the knowledge base scope.\n"
+                    "Recommendation: Use web search for this query."
+                )
+                print(output)
+                print("="*80 + "\n")
+                return output
             
-            # Format results
+            # ✅ Check relevance score of best result
+            best_score = results[0]['score']
+            print(f"🎯 Best relevance score: {best_score:.4f} (threshold: {self.relevance_threshold})")
+            
+            if best_score < self.relevance_threshold:
+                print(f"⚠️  Score below threshold - query likely not relevant to knowledge base\n")
+                output = (
+                    f"❌ NOT FOUND - Results not relevant to query.\n"
+                    f"Best match score: {best_score:.4f} (below threshold: {self.relevance_threshold})\n"
+                    f"This query appears to be outside the knowledge base scope.\n"
+                    f"The knowledge base contains information about: DSPY, machine learning frameworks, AI development.\n"
+                    f"Recommendation: Use web search for this query."
+                )
+                print(output)
+                print("="*80 + "\n")
+                return output
+            
+            # ✅ Results are relevant - format and return them
+            print("✅ Relevant results found!\n")
             formatted_results = []
             for i, result in enumerate(results, 1):
                 score = result['score']
-                content = result['payload'].get('text', 'N/A')[:300]  # Show more content
+                content = result['payload'].get('text', 'N/A')[:300]
                 source = result['payload'].get('source', 'N/A')
                 
-                logger.info(f"Result {i}: Score={score:.4f}, Source={source}")
+                # Print each result
+                print(f"📄 Result {i}:")
+                print(f"   ⭐ Score: {score:.4f}")
+                print(f"   📝 Content: {content[:150]}...")
+                print(f"   📁 Source: {source}")
+                print()
                 
                 formatted_results.append(
                     f"Result {i} (Relevance: {score:.4f}):\n"
@@ -102,13 +129,28 @@ class QdrantSearchTool(BaseTool):
                     f"Source: {source}\n"
                 )
             
-            return "\n".join(formatted_results)
+            output = "\n".join(formatted_results)
+            
+            # Show final output
+            print("="*80)
+            print("📤 TOOL OUTPUT:")
+            print("="*80)
+            print(output[:800])  # First 800 characters
+            if len(output) > 800:
+                print(f"\n... (truncated, total length: {len(output)} characters)")
+            print("="*80 + "\n")
+            
+            return output
             
         except Exception as e:
-            error_msg = f"Error in QdrantSearchTool: {str(e)}"
+            error_msg = f"❌ Error in QdrantSearchTool: {str(e)}"
+            print("\n" + "="*80)
+            print(error_msg)
+            print("="*80 + "\n")
             logger.error(error_msg, exc_info=True)
             return f"Error searching knowledge base: {str(e)}"
-    
+        
+            
     def search_documents(
         self,
         collection_name: str,
